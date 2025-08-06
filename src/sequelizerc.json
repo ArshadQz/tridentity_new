@@ -1,0 +1,6 @@
+{
+  "config": "src/config/config.js",
+  "migrations-path": "src/migrations",
+  "models-path": "src/models",
+  "seeders-path": "src/seeders"
+}
