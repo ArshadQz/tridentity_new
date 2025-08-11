@@ -31,6 +31,25 @@ company_access_api.post(`${ns}/login`, async (req, res) => {
     return res.status(500).json({ error: 'Login Failed' });
   }
 });
+
+company_access_api.post(`${ns}/getNationalProfile`, async (req, res) => {
+  try {
+    const { data } = req.body;
+    
+    if (!data || !data.token || !data.nonce) {
+      return res.status(400).json({ error: 'Token or nonce is required' });
+    }
+
+    const detail = await CMAuth.retrieveNationalDetail(data.token, data.nonce);
+
+    // console.log(`OK jwt TOKEN GENERATED`);
+    return res.status(200).json(detail);
+  } catch (e) {
+    console.error(`Login Failed:`, e.message);
+    return res.status(500).json({ error: 'Login Failed' });
+  }
+});
+
 // company_access_api.post(`${ns}/refreshtoken`, async (req, res) => {
 //   try {
 //     const { refreshToken } = req.body;

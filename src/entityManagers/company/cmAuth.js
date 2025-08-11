@@ -6,7 +6,6 @@ import { mysqlDateTime } from '../../routes/helper/getDate.js';
 import { sequelize } from '../../sequelize.js';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
-import { deleteRedis, getRedis, redisGetAllJwts, redisGetAllJwtsGame, setRedis } from '../../helper/redisHelper.js';
 import { token } from 'morgan';
 // import { deleteRedis } from '../../helper/redisHelper.js';
 const classIdentifier = 'Company Auth';
@@ -15,7 +14,7 @@ export class CMAuth {
     try {
       const { Customer, Jwt } = MODELS;
       let customer;
-      if (process.env.NODE_ENV != 'development') {
+      if (true) {
         if(process.env.BYPASS){
            tridentToken = Math.random().toString(12).split(".")[1];
         }
@@ -79,6 +78,18 @@ export class CMAuth {
 
 
       return { accessToken, customerId: customer.id };
+    } catch (err) {
+      console.error('Login error:', err);
+      throw new Error('Login failed. Please try again.');
+    }
+  }
+
+  static async retrieveNationalDetail(tridentToken,nonce) {
+    try {
+      const userData = await this.getProfile(tridentToken,nonce);
+      if(!userData && !userData.data) throw Error("Cannot find profile")
+
+      return { data: userData.data };
     } catch (err) {
       console.error('Login error:', err);
       throw new Error('Login failed. Please try again.');
@@ -148,6 +159,38 @@ export class CMAuth {
     }
   }
 
+  static async getProfile(token, nonce) {
+    if (!token) return false;
+   
+    const TDT_URL = process.env.TDT_API+"/external/ekyc/nation/profile";
+    
+    const headers = {
+      'app-id': process.env.APP_ID,
+      'api-key': process.env.APP_KEY,
+      'Content-Type': 'application/json'
+    };
+
+    try {
+
+      console.log(`called verify `, new Date().toISOString());
+      const resp = await axios.post(TDT_URL, { token, nonce }, { headers });
+      console.log(resp)
+      const profileData = resp?.data;
+      // console.log(identityToken)
+      if (!profileData) {
+        console.error('Identity token not found in response. ', new Date().toISOString());
+        return false;
+      }
+      
+      return profileData;
+
+    } catch (error) {
+      console.error('Token Error:', error.response?.data || error.message);
+      const timestamp = new Date().toISOString();
+      console.log(`Error - `, timestamp);
+      return false;
+    }
+  }
 
 
   //  Refresh Token
@@ -196,17 +239,9 @@ export class CMAuth {
     // }
     // console.log(tokenRecord);
     // await tokenRecord.destroy({ force: true });
-    const redisKey = `gamelogin:${user.customerId}`;
-    await deleteRedis(redisKey);
   }
   static async checkJwt(token, custId) {
     // console.log('token', token);
-    const redisKey = `gamelogin:${custId}`;
-    const redisValue = await getRedis(redisKey);
-    if (redisValue?.accessToken === token) {
-      // console.log('JWT found in Redis');
-      return true;
-    }
     const { Jwt } = MODELS;
     const jwt = await Jwt.findOne({
       where: {
@@ -222,16 +257,6 @@ export class CMAuth {
 
   static async profile(querier) {
     const customerId = querier?.claims?.id;
-
-    try {
-      const redisValue = await getRedis(`gamelogin:${customerId}`);
-      if (redisValue?.user) {
-        return redisValue.user;
-      }
-    } catch (error) {
-      console.warn(" Redis failed, fall back to database")
-    }
-
     const { Customer } = MODELS;
     const customer = await Customer.findByPk(customerId);
     return customer.get({ plain: true });
