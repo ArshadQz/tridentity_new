@@ -7,6 +7,10 @@ import { sequelize } from '../../sequelize.js';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { token } from 'morgan';
+import { GlobalCommon } from '../../helper/globalCommon.js';
+import { randomBytes, createHash } from 'crypto';
+import { jwtDecode } from "jwt-decode";
+
 // import { deleteRedis } from '../../helper/redisHelper.js';
 const classIdentifier = 'Company Auth';
 export class CMAuth {
@@ -84,12 +88,46 @@ export class CMAuth {
     }
   }
 
-  static async retrieveNationalDetail(tridentToken,nonce) {
+  static async retrieveNationalDetail(tridentToken,nonce,type) {
     try {
-      const userData = await this.getProfile(tridentToken,nonce);
+      const userData = await this.getProfile(tridentToken,nonce,type);
       if(!userData && !userData.data) throw Error("Cannot find profile")
 
       return { data: userData.data };
+    } catch (err) {
+      console.error('Login error:', err);
+      throw new Error('Login failed. Please try again.');
+    }
+  }
+
+  static async retrieveNationalDetailOidc(code,challenge,type) {
+    try {
+      const userData = await this.getOidcProfile(code, challenge, type);
+      if(!userData) throw Error("Cannot find profile")
+
+      return { data: userData  };
+    } catch (err) {
+      console.error('Login error:', err);
+      throw new Error('Login failed. Please try again.');
+    }
+  }
+
+  static async getUrl() {
+    try {
+      const urlRe = await this.getNationalUrl();
+      // console.log("urlRe",urlRe)
+      return { url: urlRe.data };
+    } catch (err) {
+      console.error('Login error:', err);
+      throw new Error('Login failed. Please try again.');
+    }
+  }
+
+  static async getOPUrl() {
+    try {
+      const urlRe = await this.getNationalUrl();
+      // console.log("urlRe",urlRe)
+      return { url: urlRe.data };
     } catch (err) {
       console.error('Login error:', err);
       throw new Error('Login failed. Please try again.');
@@ -159,21 +197,21 @@ export class CMAuth {
     }
   }
 
-  static async getProfile(token, nonce) {
+  static async getProfile(token, nonce,type) {
     if (!token) return false;
    
     const TDT_URL = process.env.TDT_API+"/external/ekyc/nation/profile";
     
     const headers = {
-      'app-id': process.env.APP_ID,
-      'api-key': process.env.APP_KEY,
+      'x-key-id': process.env.APP_ID,
+      'x-secret-key': process.env.APP_KEY,
       'Content-Type': 'application/json'
     };
 
     try {
 
       console.log(`called verify `, new Date().toISOString());
-      const resp = await axios.post(TDT_URL, { token, nonce }, { headers });
+      const resp = await axios.post(TDT_URL, { token, nonce ,type}, { headers });
       console.log(resp)
       const profileData = resp?.data;
       // console.log(identityToken)
@@ -192,6 +230,142 @@ export class CMAuth {
     }
   }
 
+  static async getNationalUrl() {
+   
+    const TDT_URL = process.env.TDT_API+"/external/ekyc/nation/url";
+    
+    const headers = {
+      'x-key-id': process.env.APP_ID,
+      'x-secret-key': process.env.APP_KEY,
+      'Content-Type': 'application/json'
+    };
+    const codeVerifier = randomBytes(32).toString('base64url');
+    const codeChallenge = createHash('sha256')
+        .update(codeVerifier)
+        .digest()
+        .toString('base64url');
+
+    
+    const gC = new GlobalCommon();
+    gC.push(codeChallenge ,codeVerifier);
+    console.log("codeChallenge" ,codeChallenge)
+    console.log("codeVerifier" ,codeVerifier)
+
+    try {      
+      let data={
+        "scope":["identity","email","phone"],
+        "codeChallenger":codeChallenge,
+        "oidcClientId": process.env.OIDC_ID,
+        "kycType": 2
+      }
+
+
+      console.log(`called verify `, new Date().toISOString());
+      const resp = await axios.post(TDT_URL, data, { headers });
+      // console.log('nat',resp)
+      const profileData = resp?.data;
+      // console.log(identityToken)
+      
+      return profileData;
+
+    } catch (error) {
+      console.error('Token Error:', error.response?.data || error.message);
+      const timestamp = new Date().toISOString();
+      console.log(`Error - `, timestamp);
+      return false;
+    }
+  }
+
+  static async getNationalOPUrl() {
+   
+    const TDT_URL = process.env.TDT_API+"/external/ekyc/nation/url";
+    
+    const headers = {
+      'x-key-id': process.env.APP_ID,
+      'x-secret-key': process.env.APP_KEY,
+      'Content-Type': 'application/json'
+    };
+    const codeVerifier = randomBytes(32).toString('base64url');
+    const codeChallenge = createHash('sha256')
+        .update(codeVerifier)
+        .digest()
+        .toString('base64url');
+
+    
+    const gC = new GlobalCommon();
+    gC.push(codeChallenge ,codeVerifier);
+    console.log("codeChallenge" ,codeChallenge)
+    console.log("codeVerifier" ,codeVerifier)
+
+    try {      
+      let data={
+        "scope":["identity","email","phone"],
+        "codeChallenger":codeChallenge
+      }
+
+
+      console.log(`called verify `, new Date().toISOString());
+      const resp = await axios.post(TDT_URL, data, { headers });
+      // console.log('nat',resp)
+      const profileData = resp?.data;
+      // console.log(identityToken)
+      
+      return profileData;
+
+    } catch (error) {
+      console.error('Token Error:', error.response?.data || error.message);
+      const timestamp = new Date().toISOString();
+      console.log(`Error - `, timestamp);
+      return false;
+    }
+  }
+  
+  static async getOidcProfile(code,codeChallenge,type) {
+   
+    const TDT_URL = process.env.TDT_API+"/oidc/token";
+    
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+
+
+    const gC = new GlobalCommon();
+    let codeVerifier = gC.get(codeChallenge);
+    console.log('codeChallenge',codeChallenge)
+    console.log('codeVerifier',codeVerifier)
+    let data={
+      'grant_type':'authorization_code',
+      'client_id': process.env.OIDC_ID,
+      'client_secret': process.env.OIDC_SECRET,
+      'code':code,
+      'code_verifier':codeVerifier
+    }
+  const body = new URLSearchParams(data).toString();
+
+    try {
+
+      console.log(`called verify `, new Date().toISOString());
+      const resp = await axios.post(TDT_URL, body, { headers });
+      console.log('nat',resp)
+      const jwToken = resp?.data.data.id_token;
+      const decodedData = jwtDecode(jwToken);
+      console.log('decodedData',decodedData)
+      
+      return decodedData;
+
+    } catch (error) {
+      console.error('Token Error:', error.response?.data || error.message);
+      const timestamp = new Date().toISOString();
+      console.log(`Error - `, timestamp);
+      return false;
+    }
+  }
+
+
+  
+
+  
 
   //  Refresh Token
   // static async refreshToken(refreshToken) {

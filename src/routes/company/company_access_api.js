@@ -2,6 +2,7 @@ import express from "express";
 import { CMAuth } from "../../entityManagers/company/cmAuth.js";
 import { ApiResponse } from "../helper/ApiResponse.js";
 import { ApiError } from "../helper/ApiError.js";
+import { GlobalCommon } from "../../helper/globalCommon.js";
 export const company_access_api = express.Router();
 
 const ns = `/company/access`;
@@ -36,11 +37,11 @@ company_access_api.post(`${ns}/getNationalProfile`, async (req, res) => {
   try {
     const { data } = req.body;
     
-    if (!data || !data.token || !data.nonce) {
-      return res.status(400).json({ error: 'Token or nonce is required' });
+    if (!data || !data.token || !data.nonce || !data.type) {
+      return res.status(400).json({ error: 'Token or nonce or type is required' });
     }
 
-    const detail = await CMAuth.retrieveNationalDetail(data.token, data.nonce);
+    const detail = await CMAuth.retrieveNationalDetail(data.token, data.nonce ,data.type);
 
     // console.log(`OK jwt TOKEN GENERATED`);
     return res.status(200).json(detail);
@@ -50,6 +51,36 @@ company_access_api.post(`${ns}/getNationalProfile`, async (req, res) => {
   }
 });
 
+company_access_api.post(`${ns}/getNationalProfileOidc`, async (req, res) => {
+  try {
+    const { data } = req.body;
+    
+    if (!data || !data.code || !data.type || !data.codeChallenge) {
+      return res.status(400).json({ error: 'Code or challenge or type is required' });
+    }
+
+    const detail = await CMAuth.retrieveNationalDetailOidc(data.code, data.codeChallenge ,data.type);
+
+    // console.log(`OK jwt TOKEN GENERATED`);
+    return res.status(200).json(detail);
+  } catch (e) {
+    console.error(`Login Failed:`, e.message);
+    return res.status(500).json({ error: 'Login Failed' });
+  }
+});
+
+company_access_api.get(`${ns}/getUrl`, async (req, res) => {
+  try {
+    // const {  } = req.body;
+    const url = await CMAuth.getUrl();
+
+    // console.log(`OK jwt TOKEN GENERATED`);
+    return res.status(200).json({ data: url });
+  } catch (e) {
+    console.error(`Login Failed:`, e.message);
+    return res.status(500).json({ error: 'Login Failed' });
+  }
+});
 // company_access_api.post(`${ns}/refreshtoken`, async (req, res) => {
 //   try {
 //     const { refreshToken } = req.body;

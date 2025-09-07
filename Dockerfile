@@ -9,5 +9,5 @@ RUN npm i
 COPY --chown=node:node . .
 EXPOSE 3001
 USER node
-ENV NODE_ENV development
+ENV HOME=/home/node NPM_CONFIG_CACHE=/home/node/.npm NODE_ENV=development
 CMD [ "npm", "run", "start"]
