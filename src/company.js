@@ -40,7 +40,8 @@ const init = async () => {
   );
 
   app.use(companyApis);
-
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
+app.get('/ready',   (_req, res) => res.status(200).send('ok'));
   app.listen(process.env.COMPANY_PORT, async () => {
     console.log(
       `COMPANY START:: Listening on COMPANY_PORT ${process.env.COMPANY_PORT}!`
